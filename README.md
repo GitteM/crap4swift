@@ -5,6 +5,14 @@
 It combines function cyclomatic complexity with llvm-cov function coverage and reports CRAP scores.
 On each run it deletes stale coverage artifacts, runs coverage, then analyzes the selected files.
 
+## Credits
+
+This project was inspired by [crap4java](https://github.com/unclebob/crap4java) by
+[Robert C. Martin (Uncle Bob)](https://github.com/unclebob). `crap4swift` is a Swift
+take on that same idea.
+
+Thanks to Uncle Bob for the original tool and for making it available.
+
 ## Formula
 
 `CRAP = CC^2 * (1 - coverage)^3 + CC`
