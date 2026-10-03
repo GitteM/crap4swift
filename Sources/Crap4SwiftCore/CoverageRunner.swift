@@ -28,7 +28,14 @@ final class CoverageRunner {
         }
     }
 
-    static let coverageCommand = ["swift", "test", "--enable-code-coverage"]
+    /// The native build system is requested explicitly. A package configured for the
+    /// `swiftbuild` build system writes its coverage under `.build/out/Products/...`, and
+    /// that report is partial — it covers one test bundle, so whole modules are reported
+    /// as `N/A` and their methods escape the threshold. `native` yields the complete,
+    /// aggregated report on every machine and toolchain.
+    static let coverageCommand = [
+        "swift", "test", "--enable-code-coverage", "--build-system", "native",
+    ]
 
     private func deleteStaleArtifacts(moduleRoot: URL) throws {
         for directory in CoverageRunner.codecovDirectories(in: moduleRoot) {

@@ -15,7 +15,10 @@ final class CoverageRunnerTests: XCTestCase {
         try runner.generateCoverage(moduleRoot: root)
 
         XCTAssertFalse(FileManager.default.fileExists(atPath: codecov.path))
-        XCTAssertEqual(executor.commands.first, ["swift", "test", "--enable-code-coverage"])
+        XCTAssertEqual(
+            executor.commands.first,
+            ["swift", "test", "--enable-code-coverage", "--build-system", "native"]
+        )
         XCTAssertEqual(executor.directories.first?.standardizedFileURL.path, root.standardizedFileURL.path)
     }
 

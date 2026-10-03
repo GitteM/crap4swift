@@ -136,7 +136,8 @@ Coverage generation and codecov JSON lookup shall occur once per module group.
 For each module group, the tool shall:
 
 1. delete stale coverage artifacts
-2. run `swift test --enable-code-coverage` with SwiftPM
+2. run `swift test --enable-code-coverage --build-system native` with SwiftPM, so the
+   report is complete regardless of the package's configured build system
 3. read the resulting codecov JSON report
 4. analyze the selected Swift files in that module
 
