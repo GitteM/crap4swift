@@ -33,8 +33,13 @@ enum TempDir {
 final class RecordingExecutor: CommandExecutor {
     var commands: [[String]] = []
     var directories: [URL] = []
+    var outputCommands: [[String]] = []
+    var outputURLs: [URL] = []
     var exitCode: Int32
+    /// The exit code for the output-writing form; defaults to `exitCode`.
+    var outputExitCode: Int32?
     var onRun: ((URL) -> Void)?
+    var onRunWritingOutput: ((URL) -> Void)?
 
     init(exitCode: Int32 = 0) {
         self.exitCode = exitCode
@@ -45,5 +50,12 @@ final class RecordingExecutor: CommandExecutor {
         directories.append(directory)
         onRun?(directory)
         return exitCode
+    }
+
+    func run(_ command: [String], directory: URL, writingStandardOutputTo output: URL) throws -> Int32 {
+        outputCommands.append(command)
+        outputURLs.append(output)
+        onRunWritingOutput?(output)
+        return outputExitCode ?? exitCode
     }
 }

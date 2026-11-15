@@ -43,7 +43,7 @@ final class CrapAnalyzerTests: XCTestCase {
             (name: "$s4beta", startLine: 9, regions: [[9, 1, 11, 1, 0, 0, 0, 0]])
         ]), to: json)
 
-        let metrics = try CrapAnalyzer.analyze(projectRoot: root, files: [source], coverageJSON: json)
+        let metrics = try CrapAnalyzer.analyze(projectRoot: root, files: [source], coverageJSON: json).metrics
 
         XCTAssertEqual(metrics.map(\.methodName), ["alpha", "beta", "gamma"])
 
@@ -84,5 +84,116 @@ final class CrapAnalyzerTests: XCTestCase {
         XCTAssertEqual(CrapAnalyzer.parseTrailingLine("/tmp/S.swift#10", prefixLength: "/tmp/S.swift#".count), 10)
         XCTAssertEqual(CrapAnalyzer.parseTrailingLine("/tmp/S.swift#oops", prefixLength: "/tmp/S.swift#".count), Int.max)
         XCTAssertEqual(CrapAnalyzer.parseTrailingLine("/tmp/S.swift#", prefixLength: "/tmp/S.swift#".count), Int.max)
+    }
+
+    func testModuleNameIsThePathComponentAfterSources() {
+        XCTAssertEqual(CrapAnalyzer.moduleName(ofPath: "/repo/AppPackages/Features/Sources/Library/SearchModel.swift"), "Library")
+        XCTAssertNil(CrapAnalyzer.moduleName(ofPath: "/repo/AppPackages/Features/Tests/LibraryTests/SearchModelTests.swift"))
+        XCTAssertNil(CrapAnalyzer.moduleName(ofPath: "/repo/Sources/Stray.swift"))
+    }
+
+    /// A module with code and no record of it at all: its methods score nil, and a nil score is
+    /// never compared with the threshold. That is reported, because the tool cannot tell a broken
+    /// report from code no test binary links — `Mocks` (`#if DEBUG`) and `ServiceProtocols` (an
+    /// uncalled extension) are both legitimately absent from their package's export.
+    func testReportsAModuleThatContributesNoCoverage() throws {
+        let root = try TempDir.make()
+        let source = root.appendingPathComponent("Sources/Library/SearchModel.swift")
+        try TempDir.write([
+            "struct SearchModel {",
+            "    func name(_ a: Bool) -> String {",
+            "        if a {",
+            "            return \"C\"",
+            "        }",
+            "        return \"\"",
+            "    }",
+            "}"
+        ].joined(separator: "\n"), to: source)
+
+        // A second module the report does carry, so the run is otherwise healthy — the shape of a
+        // real package whose `Mocks` target nothing links.
+        let measured = root.appendingPathComponent("Sources/Design/Strings.swift")
+        try TempDir.write([
+            "struct Strings {",
+            "    func alpha() -> Int {",
+            "        return 1",
+            "    }",
+            "}"
+        ].joined(separator: "\n"), to: measured)
+
+        let json = root.appendingPathComponent("coverage.json")
+        try TempDir.write(exportJSON(path: measured.path, functions: [
+            (name: "$s5alpha", startLine: 2, regions: [[2, 1, 3, 1, 1, 0, 0, 0]])
+        ]), to: json)
+
+        let result = try CrapAnalyzer.analyze(
+            projectRoot: root,
+            files: [source, measured],
+            coverageJSON: json
+        )
+
+        XCTAssertEqual(result.unmeasuredModules, ["Library"])
+        XCTAssertFalse(result.metrics.isEmpty, "the module is still scored, so its N/A rows are visible")
+        XCTAssertTrue(result.metrics.contains { $0.coveragePercent == nil })
+        XCTAssertTrue(
+            CliApplication.unmeasuredWarning(result.unmeasuredModules)
+                .contains("no coverage for module(s) Library")
+        )
+    }
+
+    /// A report that measured nothing at all is the unambiguous failure, and it is what a broken
+    /// export looks like: every method unscored, and the threshold compares against nothing.
+    func testFailsWhenTheReportMeasuredNothing() throws {
+        let root = try TempDir.make()
+        let source = root.appendingPathComponent("Sources/Library/SearchModel.swift")
+        try TempDir.write([
+            "struct SearchModel {",
+            "    func alpha() -> Int {",
+            "        return 1",
+            "    }",
+            "}"
+        ].joined(separator: "\n"), to: source)
+        let json = root.appendingPathComponent("coverage.json")
+        try TempDir.write(exportJSON(path: "/nowhere/Other.swift", functions: []), to: json)
+
+        XCTAssertThrowsError(try CrapAnalyzer.analyze(projectRoot: root, files: [source], coverageJSON: json)) { error in
+            XCTAssertEqual(
+                CliApplication.message(for: error),
+                "The coverage report measured nothing — no method could be scored. "
+                    + "Check that the package's tests ran and that its coverage export succeeded."
+            )
+        }
+    }
+
+    /// One measured file is enough: a file may legitimately hold no instrumented code, because
+    /// every declaration in it can sit behind a platform conditional the host build excludes.
+    func testScoresWhenOneFileOfAModuleIsMeasured() throws {
+        let root = try TempDir.make()
+        let measured = root.appendingPathComponent("Sources/App/Measured.swift")
+        let excluded = root.appendingPathComponent("Sources/App/UIKitOnly.swift")
+        let body = [
+            "struct Sample {",
+            "    func alpha() -> Int {",
+            "        return 1",
+            "    }",
+            "}"
+        ].joined(separator: "\n")
+        try TempDir.write(body, to: measured)
+        try TempDir.write(body, to: excluded)
+
+        let json = root.appendingPathComponent("coverage.json")
+        try TempDir.write(exportJSON(path: measured.path, functions: [
+            (name: "$s5alpha", startLine: 2, regions: [[2, 1, 3, 1, 1, 0, 0, 0]])
+        ]), to: json)
+
+        let result = try CrapAnalyzer.analyze(
+            projectRoot: root,
+            files: [measured, excluded],
+            coverageJSON: json
+        )
+
+        XCTAssertEqual(result.metrics.count, 2)
+        XCTAssertEqual(result.metrics.filter { $0.coveragePercent != nil }.count, 1)
+        XCTAssertEqual(result.unmeasuredModules, [], "one measured file makes the module measured")
     }
 }

@@ -2,6 +2,13 @@ import Foundation
 
 enum Main {
 
+    /// The tool's version, reported by `--version`.
+    ///
+    /// Repositories gate on it: a binary predating the complete coverage export reports `N/A`
+    /// for whole modules and passes them, so the gate refuses a tool that cannot say its
+    /// version. Bump this whenever the coverage pipeline changes.
+    static let version = "1.8.0"
+
     static func run(_ args: [String],
                     projectRoot: URL,
                     out: @escaping (String) -> Void,
@@ -18,6 +25,7 @@ enum Main {
           crap4swift --changed  Analyze changed Swift files under Sources/
           crap4swift <path...>  Analyze files, or for directory args analyze <dir>/Sources/**/*.swift
           crap4swift --help     Print this help message
+          crap4swift --version  Print the tool's version
 
         """
     }
