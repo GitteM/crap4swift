@@ -3,15 +3,19 @@ import XCTest
 
 final class CliApplicationTests: XCTestCase {
 
-    private func emptyCoverageJSON() -> String {
+    /// A report with one measured function, so the module that holds it counts as measured.
+    private func coverageJSON(for source: URL) -> String {
         """
-        {"data":[{"files":[],"functions":[]}],"type":"llvm.coverage.json.export","version":"3.0.1"}
+        {"data":[{"files":[],"functions":[{"name":"$s5alpha","count":1,
+        "filenames":["\(source.path)"],"regions":[[2,1,3,1,1,0,0,0]]}]}],
+        "type":"llvm.coverage.json.export","version":"3.0.1"}
         """
     }
 
     private func writeCoverage(into moduleRoot: URL) {
+        let source = moduleRoot.appendingPathComponent("Sources/App/Sample.swift")
         let json = moduleRoot.appendingPathComponent(".build/out/Products/Debug/codecov/App.json")
-        try? TempDir.write(emptyCoverageJSON(), to: json)
+        try? TempDir.write(coverageJSON(for: source), to: json)
     }
 
     private func makeApplication(_ root: URL,

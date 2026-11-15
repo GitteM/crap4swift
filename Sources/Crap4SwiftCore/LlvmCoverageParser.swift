@@ -53,6 +53,14 @@ enum LlvmCoverageParser {
         return coverage
     }
 
+    /// Every source path the report carries at least one entry for. A file absent from this set
+    /// was not instrumented, so nothing declared in it can be scored.
+    static func measuredPaths(in coverage: [String: CoverageData]) -> Set<String> {
+        Set(coverage.keys.compactMap { key in
+            key.split(separator: "#", maxSplits: 1).first.map(String.init)
+        })
+    }
+
     private static func readFunction(_ regions: [[Any]],
                                      into coverage: inout [String: CoverageData],
                                      filename: String) {

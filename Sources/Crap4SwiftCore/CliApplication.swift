@@ -32,21 +32,41 @@ final class CliApplication {
             return 0
         }
 
+        if parsed.mode == .version {
+            out("crap4swift \(Main.version)\n")
+            return 0
+        }
+
         let filesToAnalyze = try filesForMode(parsed)
         if filesToAnalyze.isEmpty {
             out("No Swift files to analyze.\n")
             return 0
         }
 
-        let metrics = try analyzeByModule(filesToAnalyze)
-        out(ReportFormatter.format(metrics))
+        let analysis = try analyzeByModule(filesToAnalyze)
+        out(ReportFormatter.format(analysis.metrics))
 
-        let maximum = Main.maxCrap(metrics)
+        if !analysis.unmeasuredModules.isEmpty {
+            err(CliApplication.unmeasuredWarning(analysis.unmeasuredModules))
+        }
+
+        let maximum = Main.maxCrap(analysis.metrics)
         if CliApplication.thresholdExceeded(maximum) {
             err(String(format: "CRAP threshold exceeded: %.1f > 8.0\n", maximum))
             return 2
         }
         return 0
+    }
+
+    /// Said out loud, because a method with no coverage scores nothing and is compared with no
+    /// threshold. Measured 2026-11-15: `Mocks` (`#if DEBUG`, used by other packages' tests) and
+    /// `ServiceProtocols` (one extension method its package's tests never call) are both legitimately
+    /// absent from their package's export — no test binary links them — so this is a warning, not a
+    /// failure. A report that measured **nothing** is the failure (`CrapAnalyzerError.nothingMeasured`).
+    static func unmeasuredWarning(_ modules: [String]) -> String {
+        let names = modules.joined(separator: ", ")
+        return "Warning: no coverage for module(s) \(names) — no test binary of this package links "
+            + "their code, so their methods score N/A and are not compared with the threshold.\n"
     }
 
     static func thresholdExceeded(_ maximum: Double) -> Bool {
@@ -64,6 +84,8 @@ final class CliApplication {
         case .explicitFiles:
             return try explicitFiles(parsed.fileArgs)
         case .help:
+            return []
+        case .version:
             return []
         }
     }
@@ -129,8 +151,8 @@ final class CliApplication {
         return order.map { (moduleRoot: $0, files: grouped[$0.path]!.files) }
     }
 
-    private func analyzeByModule(_ filesToAnalyze: [URL]) throws -> [MethodMetrics] {
-        var metrics: [MethodMetrics] = []
+    private func analyzeByModule(_ filesToAnalyze: [URL]) throws -> CrapAnalyzer.Result {
+        var result = CrapAnalyzer.Result(metrics: [], unmeasuredModules: [])
         for group in groupByModuleRoot(filesToAnalyze) {
             try coverageRunner.generateCoverage(moduleRoot: group.moduleRoot)
 
@@ -139,13 +161,17 @@ final class CliApplication {
                 err("Warning: Swift coverage JSON not found under \(group.moduleRoot.path)/.build. Coverage will be N/A.\n")
             }
 
-            metrics.append(contentsOf: try CrapAnalyzer.analyze(
+            let analysis = try CrapAnalyzer.analyze(
                 projectRoot: group.moduleRoot,
                 files: group.files,
                 coverageJSON: coverageJSON
-            ))
+            )
+            result = CrapAnalyzer.Result(
+                metrics: result.metrics + analysis.metrics,
+                unmeasuredModules: result.unmeasuredModules + analysis.unmeasuredModules
+            )
         }
-        return metrics
+        return result
     }
 
     // MARK: - Errors

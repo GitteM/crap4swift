@@ -20,6 +20,10 @@ enum CliArgumentsParser {
             return CliArguments(mode: .help, fileArgs: [])
         }
 
+        if args.contains("--version") {
+            return CliArguments(mode: .version, fileArgs: [])
+        }
+
         let changed = args.contains("--changed")
         let values = nonFlagArguments(args)
         if changed && !values.isEmpty {
